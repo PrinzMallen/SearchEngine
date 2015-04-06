@@ -10,5 +10,6 @@ package alr.searchengine;
  * @author Herbe_000
  */
 public class GUI {
-    
+    private String indexDir = "";
+    private LuceneController lController = new LuceneController(indexDir);
 }
