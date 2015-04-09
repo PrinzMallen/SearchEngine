@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -18,13 +20,13 @@ public class Coordinator {
     
 //---------------------------------------------------------object attributes---------------------------------------------------------
     private int crawlerCacheSize = 1;
-    private ConcurrentHashMap siteRating = new ConcurrentHashMap<Integer, String>();
+    private ConcurrentHashMap siteRating = new ConcurrentHashMap<String, MutableInt>();
     private ConcurrentHashMap crawlerThreads = new ConcurrentHashMap<Integer, DefaultCrawler>();
     private String docPath = "";
     private String indexPath = "";
     private LuceneController lController = new LuceneController(indexPath);
     private ConcurrentLinkedQueue<String> workingQueue;
-    
+     private final Logger LOGGER = LoggerFactory.getLogger(Coordinator.class);
     
 //---------------------------------------------------------constructors---------------------------------------------------------
     public Coordinator (){
@@ -39,8 +41,8 @@ public class Coordinator {
         }
     }
     
-    public ConcurrentHashMap<Integer, String> getSiteRating(){
-        return null;
+    public ConcurrentHashMap<String, MutableInt> getSiteRating(){
+        return siteRating;
     }
     
     //Zwei Dinge zu beachten, Zeit seitdem die Seite zuletzt besucht wurde und das Rating. Eventuell einen Faktor daraus bilden den man vergleichen kann.

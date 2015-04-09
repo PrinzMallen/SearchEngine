@@ -5,8 +5,6 @@
  */
 package alr.searchengine;
 
-import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -14,10 +12,10 @@ import java.util.Map;
  *
  * @author Herbe_000
  */
-public interface Crawler{
+public interface Crawler extends Runnable{
     
-    public void run() throws SQLException, IOException;
+ 
     public void setNewUrlCache(List<String> urlCache);
     public void finish();
-    public void transmitBacklinksAndAdjustRating(Map<Integer, String> backlinks);
+    public void transmitBacklinksAndAdjustRating();
 }

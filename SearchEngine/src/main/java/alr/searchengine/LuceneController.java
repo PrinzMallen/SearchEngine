@@ -7,6 +7,8 @@ package alr.searchengine;
 
 import java.util.List;
 import org.apache.lucene.document.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -16,7 +18,7 @@ public class LuceneController {
 
 //---------------------------------------------------------object attributes---------------------------------------------------------
     private String indexDir;
-
+     private final Logger LOGGER = LoggerFactory.getLogger(LuceneController.class);
     
 //---------------------------------------------------------constructors---------------------------------------------------------
     public LuceneController(String indexDir){

@@ -11,19 +11,24 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
  * @author Herbe_000
  */
-public class DefaultCrawler implements Crawler, Runnable{
+public class DefaultCrawler implements Crawler {
 
 //---------------------------------------------------------object attributes---------------------------------------------------------
     private List<String> urlCache;
@@ -31,22 +36,22 @@ public class DefaultCrawler implements Crawler, Runnable{
     private boolean[] params;
     private int docCounter = 0;
     private String docName = "";
-    private Map<String,String> urls=new HashMap<String, String>();
+    private List<String> urls = new ArrayList<>();
+    private Map<String, MutableInt> backLinks = new HashMap<>();
+    private final Logger LOGGER = LoggerFactory.getLogger(DefaultCrawler.class);
 
-    
 //---------------------------------------------------------constructors---------------------------------------------------------
-    public DefaultCrawler (List <String> urlCache, Coordinator coordinator){
+    public DefaultCrawler(List<String> urlCache, Coordinator coordinator) {
         this.urlCache = urlCache;
         this.coordinator = coordinator;
     }
-    
-    public DefaultCrawler (List <String> urlCache, Coordinator coordinator, boolean[] params){
+
+    public DefaultCrawler(List<String> urlCache, Coordinator coordinator, boolean[] params) {
         this.urlCache = urlCache;
         this.coordinator = coordinator;
         this.params = params;
     }
 
-    
 //---------------------------------------------------------public methods---------------------------------------------------------
     @Override
     public void run() {
@@ -58,56 +63,105 @@ public class DefaultCrawler implements Crawler, Runnable{
             }
         }
     }
-    
+
     @Override
     public void finish() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+
     }
 
     @Override
-    public void transmitBacklinksAndAdjustRating(Map<Integer, String> backlinks) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    public void transmitBacklinksAndAdjustRating() {
+        ConcurrentMap<String, MutableInt> siteRating = coordinator.getSiteRating();
+        for (String backLink : backLinks.keySet()) {
+            MutableInt count = siteRating.get(backLink);
+            if (count == null) {
+                siteRating.put(backLink, new MutableInt());
+            } else {
+                count.incrementBy(backLinks.get(backLink).get());
+            }
+        }
     }
 
     @Override
     public void setNewUrlCache(List<String> urlCache) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        this.urlCache = urlCache;
     }
-    
-    
+
 //---------------------------------------------------------private methods---------------------------------------------------------
     private void crawl(String url) throws SQLException, IOException {
+
+        if (!checkIfUrlNeedsToBeCrawled(url) || url.contains("@") || url.contains(".jpg") || url.contains(".html#")) {
+            return; // do nothing
+        }
         String docPath = coordinator.getDocPath();
-        if(!new File(docPath).exists()){
+        if (!new File(docPath).exists()) {
             new File(docPath).mkdir();
         }
 
-        //get useful information
-        Document doc = Jsoup.connect(url).timeout(10 * 1000).get();
+        //get site and ignore HTTP Errors ( 404 etc)
+        Document doc = Jsoup.connect(url).ignoreHttpErrors(true).timeout(10 * 1000).get();
 
         Writer writer = null;
+        //when url contains some documents
+        if (url.contains(".pdf")
+                || url.contains(".doc")
+                || url.contains(".xlsx")
+                || url.contains(".xls")) {
+            //toDo machbar?
+            return;
+        }
 
         docCounter++;
         //save as text as txt
         try {
-            File file = new File(docPath + docName + docCounter + ".txt");
-            BufferedWriter output = new BufferedWriter(new FileWriter(file));
-            output.write(doc.text());
-            output.close();
-            urls.put(url, docCounter+"");
+            String fileName = generateFileName(url);
+            File file = new File(fileName);
+            try (BufferedWriter output = new BufferedWriter(new FileWriter(file))) {
+                output.write(doc.text());
+            }
+            urls.add(url);
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("file could not be safed " + url);
         }
         //get all links and recursively call the processPage method
         Elements questions = doc.select("a[href]");
         for (Element link : questions) {
-
-            if(!urls.containsKey(link.attr("abs:href"))){
-                crawl(link.attr("abs:href"));
+            String nextLink = link.attr("abs:href");
+            insertBackLinkIntoMap(nextLink);
+            if (!urls.contains(nextLink)) {
+                crawl(nextLink);
             }
 
         }
     }
+
+    private boolean checkIfUrlNeedsToBeCrawled(String url) {
+        for (String mainUrl : urlCache) {
+            if (url.contains(mainUrl)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String generateFileName(String url) {
+        String transformedUrl = url.replace("http:\\\\", "");
+        transformedUrl = transformedUrl.replace('?', '_');
+        transformedUrl = transformedUrl.replace('/', '_');
+        transformedUrl = transformedUrl.replace('\\', '_');
+        transformedUrl = transformedUrl.replace('<', '_');
+        transformedUrl = transformedUrl.replace('>', '_');
+        transformedUrl = transformedUrl.replace('|', '_');
+        transformedUrl = transformedUrl.replace('"', '_');
+        return coordinator.getDocPath() + transformedUrl + ".txt";
+    }
+
+    private void insertBackLinkIntoMap(String nextLink) {
+        MutableInt count = backLinks.get(nextLink);
+        if (count == null) {
+            backLinks.put(nextLink, new MutableInt());
+        } else {
+            count.increment();
+        }
+    }
 }
-
-
