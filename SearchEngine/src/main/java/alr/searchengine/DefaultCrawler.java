@@ -12,10 +12,12 @@ import java.io.IOException;
 import java.io.Writer;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
+import javax.net.ssl.SSLHandshakeException;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -28,7 +30,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Herbe_000
  */
-public class DefaultCrawler implements Crawler {
+public class DefaultCrawler extends Thread implements Crawler {
 
 //---------------------------------------------------------object attributes---------------------------------------------------------
     private List<String> urlCache;
@@ -44,6 +46,7 @@ public class DefaultCrawler implements Crawler {
     public DefaultCrawler(List<String> urlCache, Coordinator coordinator) {
         this.urlCache = urlCache;
         this.coordinator = coordinator;
+        LOGGER.info("created crawler with urlcache: " + Arrays.toString(urlCache.toArray()));
     }
 
     public DefaultCrawler(List<String> urlCache, Coordinator coordinator, boolean[] params) {
@@ -90,16 +93,15 @@ public class DefaultCrawler implements Crawler {
 //---------------------------------------------------------private methods---------------------------------------------------------
     private void crawl(String url) throws SQLException, IOException {
 
-        if (!checkIfUrlNeedsToBeCrawled(url) || url.contains("@") || url.contains(".jpg") || url.contains(".html#")) {
+        if (url==null||!checkIfUrlNeedsToBeCrawled(url) ||url.isEmpty() || url.contains("@") || url.contains(".jpg") || url.contains(".html#") || url.contains(".gif") || url.contains(".png")) {
             return; // do nothing
         }
         String docPath = coordinator.getDocPath();
         if (!new File(docPath).exists()) {
             new File(docPath).mkdir();
         }
-
+        Document doc = null;
         //get site and ignore HTTP Errors ( 404 etc)
-        Document doc = Jsoup.connect(url).ignoreHttpErrors(true).timeout(10 * 1000).get();
 
         Writer writer = null;
         //when url contains some documents
@@ -110,14 +112,28 @@ public class DefaultCrawler implements Crawler {
             //toDo machbar?
             return;
         }
+        try {
+            doc = Jsoup.connect(url).ignoreHttpErrors(true).timeout(10 * 10000).get();
+        } catch (SSLHandshakeException ex) {
+            LOGGER.error("SSL Exception for " + url);
+            urls.add(url);
+            return;
+        } catch (Throwable t) {
+            LOGGER.error("Exception while connecting to " + url, t);
+            urls.add(url);
+            return;
 
+        }
         docCounter++;
         //save as text as txt
         try {
             String fileName = generateFileName(url);
+
             File file = new File(fileName);
-            try (BufferedWriter output = new BufferedWriter(new FileWriter(file))) {
-                output.write(doc.text());
+           
+                try (BufferedWriter output = new BufferedWriter(new FileWriter(file))) {
+                    output.write(doc.text());
+                
             }
             urls.add(url);
         } catch (IOException e) {
@@ -127,12 +143,15 @@ public class DefaultCrawler implements Crawler {
         Elements questions = doc.select("a[href]");
         for (Element link : questions) {
             String nextLink = link.attr("abs:href");
+
             insertBackLinkIntoMap(nextLink);
-            if (!urls.contains(nextLink)) {
+            if (!urls.contains(nextLink) && !super.isInterrupted()) {
                 crawl(nextLink);
+                
             }
 
         }
+        
     }
 
     private boolean checkIfUrlNeedsToBeCrawled(String url) {
@@ -145,7 +164,7 @@ public class DefaultCrawler implements Crawler {
     }
 
     private String generateFileName(String url) {
-        String transformedUrl = url.replace("http:\\\\", "");
+        String transformedUrl = url.replace("http://", "");
         transformedUrl = transformedUrl.replace('?', '_');
         transformedUrl = transformedUrl.replace('/', '_');
         transformedUrl = transformedUrl.replace('\\', '_');

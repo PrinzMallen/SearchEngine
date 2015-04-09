@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,53 +18,77 @@ import org.slf4j.LoggerFactory;
  * @author Herbe_000
  */
 public class Coordinator {
-    
+
 //---------------------------------------------------------object attributes---------------------------------------------------------
     private int crawlerCacheSize = 1;
     private ConcurrentHashMap siteRating = new ConcurrentHashMap<String, MutableInt>();
-    private ConcurrentHashMap crawlerThreads = new ConcurrentHashMap<Integer, DefaultCrawler>();
+    private CopyOnWriteArrayList<DefaultCrawler> crawlerThreads = new CopyOnWriteArrayList<>();
     private String docPath = "";
     private String indexPath = "";
-    private LuceneController lController = new LuceneController(indexPath);
-    private ConcurrentLinkedQueue<String> workingQueue;
-     private final Logger LOGGER = LoggerFactory.getLogger(Coordinator.class);
-    
+    private LuceneController lController = new LuceneController(indexPath, docPath);
+    private ConcurrentLinkedQueue<String> workingQueue = new ConcurrentLinkedQueue<>();
+    private final Logger LOGGER = LoggerFactory.getLogger(Coordinator.class);
+ 
+
 //---------------------------------------------------------constructors---------------------------------------------------------
-    public Coordinator (){
+    public Coordinator(String docPath, String indexPath) {
+        this.docPath = docPath;
+        this.indexPath = indexPath;
     }
-    
-    
+
+    public Coordinator() {
+    }
+
 //---------------------------------------------------------public methods---------------------------------------------------------
-    public void startCrawler(int numberOfCrawler){
-        for (int i=1; i <= numberOfCrawler; i++){
-            crawlerThreads.put(i, new DefaultCrawler(getUrlCacheForCrawler(), this));
-            ((DefaultCrawler) crawlerThreads.get(i)).run();
+    public void startCrawler(int numberOfCrawler) {
+        for (int i = 1; i <= numberOfCrawler; i++) {
+            DefaultCrawler crawler = new DefaultCrawler(getUrlCacheForCrawler(), this);
+            crawlerThreads.add(crawler);
+            crawler.start();
         }
+       
     }
-    
-    public ConcurrentHashMap<String, MutableInt> getSiteRating(){
+
+    public ConcurrentHashMap<String, MutableInt> getSiteRating() {
         return siteRating;
     }
-    
+
     //Zwei Dinge zu beachten, Zeit seitdem die Seite zuletzt besucht wurde und das Rating. Eventuell einen Faktor daraus bilden den man vergleichen kann.
-    public void orderUrlsToCrawl(){
+    public void orderUrlsToCrawl() {
     }
-    
+
+    public void stopCrawler() {
+      
+        for (Crawler c : crawlerThreads) {
+            ((DefaultCrawler) c).interrupt();
+        }
+    }
+
     public String getDocPath() {
         return docPath;
     }
-    
-    
-//---------------------------------------------------------private methods---------------------------------------------------------
-    private List <String> getUrlCacheForCrawler(){
-        List <String> urlCache = new ArrayList<String>();
-        for(int i=0; i<crawlerCacheSize; i++){
-            urlCache.add(workingQueue.poll()); //poll kann null liefern!
-            i++;
+
+    public void addToQueue(String url) {
+
+        if (!workingQueue.contains(url)) {
+            //LOGGER.info("added " + url + " to the queue");
+            workingQueue.offer(url);
         }
         
+  
+    }
+
+//---------------------------------------------------------private methods---------------------------------------------------------
+    private List<String> getUrlCacheForCrawler() {
+        List<String> urlCache = new ArrayList<String>();
+        for (int i = 0; i < crawlerCacheSize; i++) {
+            if (!workingQueue.isEmpty()) {
+                urlCache.add(workingQueue.poll()); //poll kann null liefern!
+                i++;
+            }
+        }
+
         return urlCache;
     }
-    
-    
+
 }
