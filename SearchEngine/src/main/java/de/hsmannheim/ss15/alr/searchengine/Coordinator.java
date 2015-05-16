@@ -58,7 +58,6 @@ public class Coordinator {
     public void stopCrawler() {
 
         stopCreatingCrawlers.set(true);
-        System.out.println("crawler crating stoped");
         for (Crawler c : crawlerThreads) {
             ((DefaultCrawler) c).interrupt();
 
@@ -79,7 +78,6 @@ public class Coordinator {
         if (checkIfNewCrawlerhasToStart()) {
             startCrawler();
         }
-        LOGGER.info("Length " + workingQueue.size());
 
     }
 
@@ -92,7 +90,7 @@ public class Coordinator {
 
         if (checkIfNewCrawlerhasToStart()) {
             startCrawler();
-        }
+        }  
     }
 
 //---------------------------------------------------------private methods---------------------------------------------------------
@@ -100,8 +98,10 @@ public class Coordinator {
         List<String> urlCache = new ArrayList<String>();
         for (int i = 0; i < crawlerCacheSize; i++) {
             if (!workingQueue.isEmpty()) {
-                urlCache.add(workingQueue.poll()); //poll kann null liefern!
+                String newUrl=workingQueue.poll();
+                urlCache.add(newUrl); //poll kann null liefern!
                 i++;
+                LOGGER.info("Crawler took new root URL: "+newUrl);
             }
         }
 

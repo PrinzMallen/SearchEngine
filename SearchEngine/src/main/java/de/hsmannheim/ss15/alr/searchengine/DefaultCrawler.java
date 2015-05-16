@@ -14,17 +14,18 @@ import static java.lang.Thread.interrupted;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import javax.net.ssl.SSLHandshakeException;
 import org.apache.pdfbox.cos.COSDocument;
+import org.apache.pdfbox.pdfparser.NonSequentialPDFParser;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.util.PDFTextStripper;
 
 import org.jsoup.Connection;
 
@@ -48,16 +49,16 @@ public class DefaultCrawler extends Thread implements Crawler {
     private boolean[] params;
     private int docCounter = 0;
     private String docName = "";
-    private List<String> urls = new ArrayList<>();
+
     private Map<String, MutableInt> backLinks = new HashMap<>();
     private final Logger LOGGER = LoggerFactory.getLogger(DefaultCrawler.class);
     private int maxLvl;
+    private List<String> disallowedForRobots = new ArrayList<>();
 
 //---------------------------------------------------------constructors---------------------------------------------------------
     public DefaultCrawler(List<String> urlCache, Coordinator coordinator, int maxLvl) {
         this.urlCache = urlCache;
         this.coordinator = coordinator;
-        LOGGER.info("created crawler with urlcache: " + Arrays.toString(urlCache.toArray()));
         this.maxLvl = maxLvl;
     }
 
@@ -86,7 +87,6 @@ public class DefaultCrawler extends Thread implements Crawler {
 
             }
             urlCache = coordinator.getUrlCacheForCrawler();
-            urls.clear();
         }
     }
 
@@ -117,10 +117,28 @@ public class DefaultCrawler extends Thread implements Crawler {
 
 //---------------------------------------------------------private methods---------------------------------------------------------
     private void crawl(URL url) {
+        //for the moment crawl every page only once. Later there can be an update interval
+        if (new File(generateFileName(url.toString())).exists()&&!isRootUrl(url)) {
+            return;
+        }
         //make sure the directory for files does exist
         String docPath = coordinator.getDocPath();
         if (!new File(docPath).exists()) {
             new File(docPath).mkdir();
+        }
+        //not possible or nessesary
+        if (url.toString().contains("jsessionid") || url.toString().contains("#")) {
+            return;
+        }
+        //if rootpage check for robots.txt
+        if (isRootUrl(url)) {
+            evaluateRobotsTxt(url);
+
+        }
+
+        if (checkIfUrlIsForbidden(url)) {
+            LOGGER.debug("url is forbitten " + url.toString());
+            return;
         }
 
         Document doc = null;
@@ -134,25 +152,27 @@ public class DefaultCrawler extends Thread implements Crawler {
             contentType = res.contentType();
 
         } catch (SocketTimeoutException | java.net.ConnectException ex) {
-            //try again
-            urlCache.add(url.toString());
+
             return;
         } catch (SSLHandshakeException ex) {
             LOGGER.error("SSL Exception for " + url, ex);
-            urls.add(url.toString());
             return;
         } catch (Throwable t) {
-            LOGGER.error("Exception while connecting to " + url, t);
-            urls.add(url.toString());
+            LOGGER.error("could not connect to " + url);
+
             return;
 
         }
-        LOGGER.debug("getting doc " + (System.currentTimeMillis() - start));
+        LOGGER.debug("getting doc " + (System.currentTimeMillis() - start) + " " + url.toString());
         docCounter++;
         //in case the contentType is text, just save the file
+
+        if (contentType == null) {
+            return;
+        }
         if (contentType.contains("text")) {
             try {
-                saveFileWithText(url.toString(), doc.text(),false);
+                saveFileWithText(url.toString(), doc.text(), false);
 
             } catch (IOException e) {
                 LOGGER.error("Exception while saving text: " + url.toString(), e);
@@ -163,7 +183,7 @@ public class DefaultCrawler extends Thread implements Crawler {
         else if (contentType.contains("pdf")) {
             try {
                 String parsedText = getTextOfPDF(res);
-                saveFileWithText(url.toString(), parsedText,true);
+                saveFileWithText(url.toString(), parsedText, true);
             } catch (IOException ex) {
                 LOGGER.error("Exception while parsing PDF: " + url.toString(), ex);
             }
@@ -171,7 +191,6 @@ public class DefaultCrawler extends Thread implements Crawler {
         } else {
             LOGGER.debug("wrong content type " + url);
         }
-        urls.add(url.toString());
 
     }
 
@@ -187,7 +206,15 @@ public class DefaultCrawler extends Thread implements Crawler {
         transformedUrl = transformedUrl.replace('|', '_');
         transformedUrl = transformedUrl.replace('"', '_');
         transformedUrl = transformedUrl.replace(':', '_');
-        return coordinator.getDocPath() + transformedUrl + ".txt";
+        String lastName = "";
+        if (transformedUrl.contains("/")) {
+            lastName = transformedUrl.substring(transformedUrl.lastIndexOf("/") + 1, transformedUrl.length());
+            transformedUrl = transformedUrl.substring(0, transformedUrl.lastIndexOf("/") + 1);
+            if (lastName.length() > 51) {
+                lastName = lastName.substring(0, 50);
+            }
+        }
+        return coordinator.getDocPath() + transformedUrl + "/" + lastName + ".txt";
     }
 
     private void insertBackLinkIntoMap(String nextLink) {
@@ -204,17 +231,27 @@ public class DefaultCrawler extends Thread implements Crawler {
     }
 
     private void saveFileWithText(String url, String text, boolean pdf) throws IOException {
+        //do nothing when text is empty
+        if (text.isEmpty()) {
+            return;
+        }
+
         //generate fileName that is ok for windows (e.g. no ':')
         String fileName = generateFileName(url.toString());
         String name;
-        File file = new File(fileName);
         //make sure directories do exist. Each Level of the Url will be a new directory
+
         if (fileName.contains("/")) {
             int last = fileName.lastIndexOf("/");
             name = fileName.substring(0, last);
+
             File directory = new File(name);
-            directory.mkdirs();
+            //if file name is to long 
+
+            Files.createDirectories(directory.toPath());
         }
+
+        File file = new File(fileName);
         //write only text into file ( no html tags etc.)
         try (BufferedWriter output = new BufferedWriter(new FileWriter(file))) {
             output.write("URL:" + url);
@@ -228,7 +265,6 @@ public class DefaultCrawler extends Thread implements Crawler {
 
             output.write(text);
         }
-
     }
 
     private void evaluateLinksOnPage(Document doc, URL url) {
@@ -274,7 +310,7 @@ public class DefaultCrawler extends Thread implements Crawler {
 
         //each Intern link will be handled by this crawler
         for (String link : nextLinksIntern) {
-            if (!urls.contains(link) && !super.isInterrupted()) {
+            if (!super.isInterrupted()) {
 
                 urlCache.add(link);
 
@@ -288,13 +324,14 @@ public class DefaultCrawler extends Thread implements Crawler {
     private String getTextOfPDF(Connection.Response res) throws IOException {
         //get response as byteStream
         ByteArrayInputStream is = new ByteArrayInputStream(res.bodyAsBytes());
+
         PDFParser parser;
         String parsedText = null;;
         PDFTextStripper pdfStripper = null;
         PDDocument pdDoc = null;
         COSDocument cosDoc = null;
 
-        parser = new PDFParser(is);
+        parser = new NonSequentialPDFParser(is);
 
         //parse PDF
         try {
@@ -302,11 +339,10 @@ public class DefaultCrawler extends Thread implements Crawler {
             cosDoc = parser.getDocument();
             pdfStripper = new PDFTextStripper();
             pdDoc = new PDDocument(cosDoc);
-            pdfStripper.setStartPage(1);
-            pdfStripper.setEndPage(10);
+
             parsedText = pdfStripper.getText(pdDoc);
         } catch (Exception e) {
-            LOGGER.error("An exception occured in parsing the PDF Document", e);
+            LOGGER.error("An exception occured in parsing the PDF Document" + res.url().toString(), e);
 
         } finally {
             if (cosDoc != null) {
@@ -318,6 +354,47 @@ public class DefaultCrawler extends Thread implements Crawler {
 
         }
         return parsedText;
+    }
+
+    private boolean checkIfUrlIsForbidden(URL url) {
+        for (String rule : disallowedForRobots) {
+            if (url.toString().contains(rule)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void evaluateRobotsTxt(URL url) {
+        try {
+            Connection.Response res = Jsoup.connect(url.toString() + "/robots.txt").ignoreContentType(true).timeout(10 * 100).execute();
+            String text = res.body();
+            for (String useragent : text.split("(?=User-agent:)")) {
+                if (useragent.contains("User-agent: *")) {
+                    text = useragent;
+                    break;
+                }
+            }
+            String[] splitByNewLine = text.split("\n");
+            for (String rule : splitByNewLine) {
+                if (rule.contains("Disallow") && rule.contains("/")) {
+                    String forbiddenUrl = rule.substring(rule.indexOf("/"), rule.length());
+                    forbiddenUrl = url.getProtocol() + "://" + url.getHost() + "" + forbiddenUrl;
+                    if (!disallowedForRobots.contains(forbiddenUrl)) {
+                        disallowedForRobots.add(forbiddenUrl);
+                    }
+
+                }
+            }
+        } catch (org.jsoup.HttpStatusException e) {
+            //ok
+        } catch (IOException ex) {
+            LOGGER.error("Exception while connecting to " + url);
+        }
+    }
+
+    private boolean isRootUrl(URL url) {
+        return (url.toString().equals(url.getProtocol() + "://" + url.getHost()) || (url.toString().equals(url.getProtocol() + "://" + url.getHost() + "/")));
     }
 
 }
