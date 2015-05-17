@@ -82,7 +82,6 @@ public class DefaultCrawler extends Thread implements Crawler {
                     } catch (MalformedURLException ex) {
                         LOGGER.error("MalformedURL: " + element, ex);
                     }
-
                 }
 
             }
@@ -118,9 +117,12 @@ public class DefaultCrawler extends Thread implements Crawler {
 //---------------------------------------------------------private methods---------------------------------------------------------
     private void crawl(URL url) {
         //for the moment crawl every page only once. Later there can be an update interval
+        
+        
         if (new File(generateFileName(url.toString())).exists()&&!isRootUrl(url)) {
             return;
         }
+       
         //make sure the directory for files does exist
         String docPath = coordinator.getDocPath();
         if (!new File(docPath).exists()) {
@@ -133,7 +135,6 @@ public class DefaultCrawler extends Thread implements Crawler {
         //if rootpage check for robots.txt
         if (isRootUrl(url)) {
             evaluateRobotsTxt(url);
-
         }
 
         if (checkIfUrlIsForbidden(url)) {
@@ -152,7 +153,7 @@ public class DefaultCrawler extends Thread implements Crawler {
             contentType = res.contentType();
 
         } catch (SocketTimeoutException | java.net.ConnectException ex) {
-
+            LOGGER.warn("could not connect to " + url+" . Reason: "+ex.getMessage());
             return;
         } catch (SSLHandshakeException ex) {
             LOGGER.error("SSL Exception for " + url, ex);
@@ -214,7 +215,11 @@ public class DefaultCrawler extends Thread implements Crawler {
                 lastName = lastName.substring(0, 50);
             }
         }
-        return coordinator.getDocPath() + transformedUrl + "/" + lastName + ".txt";
+        String completePath=coordinator.getDocPath() + transformedUrl + "/" + lastName;
+        if(completePath.length()>250){
+            completePath=completePath.substring(0,250);
+        }
+        return completePath+ ".txt";
     }
 
     private void insertBackLinkIntoMap(String nextLink) {
@@ -276,6 +281,7 @@ public class DefaultCrawler extends Thread implements Crawler {
         for (Element link : questions) {
             //get value of html tag
             String nextLink = link.attr("abs:href");
+           //System.out.println(nextLink);
             int lvlCount = nextLink.length() - nextLink.replace("//", "").length();
             //if there is a maximum level for a url ( -1 means no max), check if in range
             if (maxLvl != -1 && lvlCount > maxLvl) {
@@ -342,7 +348,7 @@ public class DefaultCrawler extends Thread implements Crawler {
 
             parsedText = pdfStripper.getText(pdDoc);
         } catch (Exception e) {
-            LOGGER.error("An exception occured in parsing the PDF Document" + res.url().toString(), e);
+            LOGGER.error("An exception occured in parsing the PDF Document" + res.url().toString());
 
         } finally {
             if (cosDoc != null) {
