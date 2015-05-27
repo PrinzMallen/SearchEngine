@@ -5,17 +5,37 @@
  */
 package de.hsmannheim.ss15.alr.searchengine;
 
+import java.net.URL;
 import java.util.List;
-import java.util.Map;
+import org.slf4j.Logger;
 
 /**
  *
  * @author Herbe_000
  */
-public interface Crawler extends Runnable{
+public abstract class Crawler extends Thread {
+
+    protected DefaultCoordinator coordinator;
+    protected List<String> urlCache;
+    protected RobotsController robotsController;
+    protected String name;
+    protected Logger LOGGER;
+    protected PDFParser pdfParser;
+
     
- 
-    public void setNewUrlCache(List<String> urlCache);
-    public void finish();
-    public void transmitBacklinksAndAdjustRating();
+    /**
+     * this method has to set some new urls to crawl.
+     * @param urlCache list of new urls
+     */
+    public abstract void setNewUrlCache(List<String> urlCache);
+    
+    /**
+     * this method has to crawl the websites
+     * @param url 
+     */
+    public abstract void crawl(URL url);
+    
+   
+
+   
 }
