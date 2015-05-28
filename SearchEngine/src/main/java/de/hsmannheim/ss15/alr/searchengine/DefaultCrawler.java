@@ -18,6 +18,7 @@ import static java.lang.Thread.interrupted;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.nio.CharBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -43,7 +44,7 @@ public class DefaultCrawler extends Crawler {
 
 //---------------------------------------------------------object attributes---------------------------------------------------------
     private Map<String, MutableInt> backLinks = new HashMap<>();
-    
+
 //---------------------------------------------------------constructors---------------------------------------------------------
     public DefaultCrawler(List<String> urlCache, DefaultCoordinator coordinator, String name) {
         this.urlCache = urlCache;
@@ -57,7 +58,7 @@ public class DefaultCrawler extends Crawler {
 //---------------------------------------------------------public methods---------------------------------------------------------
     @Override
     public void run() {
-        File urlstore=new File(System.getProperty("user.home") + "\\SearchEngine\\urlStore");
+        File urlstore = new File(System.getProperty("user.home") + "\\SearchEngine\\urlStore");
         urlstore.mkdirs();
         //crawl as long as urls are available. If every url was crawled get some new from coordinator
         while (!interrupted()) {
@@ -70,7 +71,7 @@ public class DefaultCrawler extends Crawler {
                         if (urlCache.isEmpty()) {
                             deserialiseList(250);
                             transmitBacklinksAndAdjustRating();
-                        
+
                         }
 
                     } catch (MalformedURLException ex) {
@@ -79,7 +80,7 @@ public class DefaultCrawler extends Crawler {
                 }
 
             }
-           
+
             urlCache = coordinator.getNextUrls();
         }
     }
@@ -170,7 +171,7 @@ public class DefaultCrawler extends Crawler {
                 text += "DataType:TEXT\r\n";
                 text += "Title:" + doc.title() + "\r\n";
                 text += doc.text();
-                saveFileWithText(text,url);
+                saveFileWithText(text, url);
 
             } catch (IOException e) {
                 LOGGER.error("Exception while saving text: " + url.toString(), e);
@@ -185,7 +186,7 @@ public class DefaultCrawler extends Crawler {
                 text += "DataType:PDF\r\n";
                 text += "Title:" + doc.title() + "\r\n";
                 text += parsedText;
-                saveFileWithText(text,url);
+                saveFileWithText(text, url);
             } catch (Exception ex) {
                 LOGGER.error("Exception while parsing PDF: " + url.toString(), ex);
             }
@@ -232,7 +233,7 @@ public class DefaultCrawler extends Crawler {
         }
     }
 
-    private void saveFileWithText(String text,URL url) throws IOException {
+    private void saveFileWithText(String text, URL url) throws IOException {
         //do nothing when text is empty
         if (text.isEmpty()) {
             return;
@@ -255,7 +256,7 @@ public class DefaultCrawler extends Crawler {
 
         File file = new File(fileName);
         //write only text into file ( no html tags etc.)
-        try (BufferedWriter output = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file),"UTF-8"))) {         
+        try (BufferedWriter output = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"))) {
             output.write(text);
 
         }
@@ -313,7 +314,7 @@ public class DefaultCrawler extends Crawler {
     }
 
     private void serialiseList(List<String> list, boolean append) {
-        try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\"+name + ".txt", append)))) {
+        try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt", append)))) {
             for (String s : list) {
                 out.println(s);
             }
@@ -325,18 +326,19 @@ public class DefaultCrawler extends Crawler {
     }
 
     private void deserialiseList(int count) {
-        try (BufferedReader in = new BufferedReader(new FileReader(new File(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\"+name + ".txt")))) {
+        try (BufferedReader in = new BufferedReader(new FileReader(new File(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt")))) {
             List<String> list = new ArrayList<>();
-            while (in.ready()) {
+
+            for (int i = 0; i < count && in.ready(); i++) {
                 list.add(in.readLine());
             }
-            List<String> listToadd = new ArrayList<>();
-            for (int i = 0; i < count && i < list.size(); i++) {
-                listToadd.add(list.remove(0));
-            }
+            urlCache.addAll(list);
 
-            urlCache.addAll(listToadd);
-            serialiseList(list, false);
+            PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt", false)));
+            while (in.ready()) {
+                out.println(in.readLine());
+            }
+            out.close();
 
         } catch (IOException e) {
             //exception handling left as an exercise for the reader
