@@ -48,7 +48,7 @@ public class RobotsController {
         } catch (org.jsoup.HttpStatusException e) {
             //ok
         } catch (IOException ex) {
-            LOGGER.error("Exception while connecting to " + url);
+            // ok if no robots txt
         }
 }
     

@@ -18,7 +18,6 @@ import static java.lang.Thread.interrupted;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
-import java.nio.CharBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -143,7 +142,7 @@ public class DefaultCrawler extends Crawler {
         Connection.Response res = null;
         //get response from page
         try {
-            res = Jsoup.connect(url.toString()).ignoreContentType(true).ignoreHttpErrors(true).timeout(10 * 100).execute();
+            res = Jsoup.connect(url.toString()).ignoreContentType(true).maxBodySize(0).ignoreHttpErrors(true).timeout(20 * 100).execute();
             doc = res.parse();
             contentType = res.contentType();
 
@@ -208,6 +207,7 @@ public class DefaultCrawler extends Crawler {
         transformedUrl = transformedUrl.replace('>', '_');
         transformedUrl = transformedUrl.replace('|', '_');
         transformedUrl = transformedUrl.replace('"', '_');
+        transformedUrl = transformedUrl.replace('*', '_');
         transformedUrl = transformedUrl.replace(':', '_');
         String lastName = "";
         if (transformedUrl.contains("/")) {
@@ -314,6 +314,7 @@ public class DefaultCrawler extends Crawler {
     }
 
     private void serialiseList(List<String> list, boolean append) {
+        //serialise complete list. each new line contains one url
         try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt", append)))) {
             for (String s : list) {
                 out.println(s);
@@ -321,19 +322,20 @@ public class DefaultCrawler extends Crawler {
             out.close();
 
         } catch (IOException e) {
-            //exception handling left as an exercise for the reader
+            LOGGER.error("error while serialising ", e);
         }
     }
 
     private void deserialiseList(int count) {
         try (BufferedReader in = new BufferedReader(new FileReader(new File(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt")))) {
             List<String> list = new ArrayList<>();
-
+            //read in some lines
             for (int i = 0; i < count && in.ready(); i++) {
                 list.add(in.readLine());
             }
             urlCache.addAll(list);
 
+            //rewrite rest of lines because deleting lines is not possible
             PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt", false)));
             while (in.ready()) {
                 out.println(in.readLine());
@@ -341,7 +343,7 @@ public class DefaultCrawler extends Crawler {
             out.close();
 
         } catch (IOException e) {
-            //exception handling left as an exercise for the reader
+            LOGGER.error("error while deserialising ", e);
         }
     }
 
