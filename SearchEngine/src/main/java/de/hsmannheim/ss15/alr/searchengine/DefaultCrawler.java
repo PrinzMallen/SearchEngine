@@ -65,6 +65,10 @@ public class DefaultCrawler extends Crawler {
                 if (!interrupted()) {
                     String element = urlCache.remove(0);
                     try {
+                        //check if protocol isnt missing
+                        if (!element.toLowerCase().matches("^\\w+://.*")) {
+                            element = "http://" + element;
+                        }
                         URL url = new URL(element);
                         crawl(url);
                         if (urlCache.isEmpty()) {
@@ -74,6 +78,7 @@ public class DefaultCrawler extends Crawler {
                         }
 
                     } catch (MalformedURLException ex) {
+
                         LOGGER.error("MalformedURL: " + element, ex);
                     }
                 }
