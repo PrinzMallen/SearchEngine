@@ -165,7 +165,7 @@ public String getDocPath() {
         int queueSize = workingQueue.size();
         int crawlerCount = crawlerThreads.size();
 
-        if (crawlerCount != 0 && queueSize / crawlerCount > 20 && crawlerCount < 50) {
+        if (crawlerCount != 0 && queueSize / crawlerCount > 20 && crawlerCount < 40) {
             return true;
         } else {
             return false;
