@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.net.ssl.SSLHandshakeException;
 
 import org.jsoup.Connection;
@@ -275,35 +277,44 @@ public class DefaultCrawler extends Crawler {
         List<String> nextLinksExtern = new ArrayList<>();
         for (Element link : questions) {
             //get value of html tag
-            String nextLink = link.attr("abs:href");
-
+            String nextUrl = link.attr("abs:href");
+            if (nextUrl.equals("https://meta.wikimedi")) {
+                System.out.println("achtung fehler in seite " + url.toString());
+            }
             //just in case 
-            if (nextLink.isEmpty()) {
+            if (nextUrl.isEmpty()) {
                 break;
             }
+            URL nextLink;
+            try {
+                if (!nextUrl.toLowerCase().matches("^\\w+://.*")) {
+                    nextUrl = "http://" + nextUrl;
+                }
+                nextLink = new URL(nextUrl);
+            } catch (MalformedURLException ex) {
+                //malforemd url does not need to be crawled
+                continue;
+            }
             //if the new link contains the host of actual link, its considered as intern
-            if (nextLink.contains(url.getHost())) {
-                if (!nextLinksIntern.contains(nextLink) && !new File(generateFileName(nextLink)).exists()) {
-                    nextLinksIntern.add(nextLink);
+            if (nextLink.getHost().equals(url.getHost())) {
+                if (!nextLinksIntern.contains(nextLink.toString()) && !new File(generateFileName(nextLink.toString())).exists()) {
+                    nextLinksIntern.add(nextLink.toString());
                 }
 
             } //if not its a new host and considered as extern
             else {
                 URL newUrl;
-                try {
-                    newUrl = new URL(nextLink);
-                    String nextBaseUrl = newUrl.getHost();
-                    if (!nextLinksExtern.contains(nextBaseUrl) && !nextBaseUrl.isEmpty()) {
-                        nextLinksExtern.add(newUrl.getProtocol() + "://" + nextBaseUrl);
-                        insertBackLinkIntoMap(nextBaseUrl);
-                    }
 
-                } catch (MalformedURLException ex) {
-                    LOGGER.error("MalformedURL: " + nextLink, ex);
+                newUrl = nextLink;
+                String nextBaseUrl = newUrl.getHost();
+                if (!nextLinksExtern.contains(nextBaseUrl) && !nextBaseUrl.isEmpty()) {
+                    nextLinksExtern.add(newUrl.getProtocol() + "://" + nextBaseUrl);
+                    insertBackLinkIntoMap(nextBaseUrl);
                 }
 
             }
         }
+
         serialiseList(nextLinksIntern, true);
         //each Intern link will be handled by this crawler
 //        for (String link : nextLinksIntern) {
@@ -320,7 +331,7 @@ public class DefaultCrawler extends Crawler {
 
     private void serialiseList(List<String> list, boolean append) {
         //serialise complete list. each new line contains one url
-        try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt", append)))) {
+        try (PrintWriter out = new PrintWriter(new OutputStreamWriter(new FileOutputStream(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt", append), "UTF-8"))) {
             for (String s : list) {
                 out.println(s);
             }
@@ -336,16 +347,30 @@ public class DefaultCrawler extends Crawler {
             List<String> list = new ArrayList<>();
             //read in some lines
             for (int i = 0; i < count && in.ready(); i++) {
-                list.add(in.readLine());
+                String line = in.readLine();
+                if (line.equals("https://meta.wikimedi")) {
+                    System.out.println("kill because of " + name);
+                    System.exit(0);
+                }
+                list.add(line);
             }
+
             urlCache.addAll(list);
 
             //rewrite rest of lines because deleting lines is not possible
-            PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt", false)));
+            PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + "temp.txt", false)));
             while (in.ready()) {
                 out.println(in.readLine());
             }
             out.close();
+            in.close();
+            //delete old file
+            File old= new File(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt");
+            old.delete();
+            //rename temp 
+            File temp=new File(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + "temp.txt");
+            temp.renameTo(new File(System.getProperty("user.home") + "\\SearchEngine\\urlstore\\" + name + ".txt"));
+            
 
         } catch (IOException e) {
             LOGGER.error("error while deserialising ", e);

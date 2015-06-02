@@ -16,6 +16,7 @@ import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -26,6 +27,7 @@ public class DefaultCoordinator extends Coordinator {
 
 //---------------------------------------------------------object attributes---------------------------------------------------------
     private ConcurrentHashMap<String, MutableInt> siteRating;
+    private AtomicInteger crawlerCount =new AtomicInteger(0);
 
 //---------------------------------------------------------constructors---------------------------------------------------------
     public DefaultCoordinator(String docPath, int crawlerCacheSize) {
@@ -50,7 +52,7 @@ public class DefaultCoordinator extends Coordinator {
 //---------------------------------------------------------public methods---------------------------------------------------------
     @Override
     public void startCrawler() {
-
+        crawlerCount.incrementAndGet();
         DefaultCrawler crawler = new DefaultCrawler(getNextUrls(), this, "crawler" + crawlerThreads.size());
         crawlerThreads.add(crawler);
         crawler.start();
@@ -163,9 +165,9 @@ public String getDocPath() {
 
     private boolean checkIfNewCrawlerhasToStart() {
         int queueSize = workingQueue.size();
-        int crawlerCount = crawlerThreads.size();
+        
 
-        if (crawlerCount != 0 && queueSize / crawlerCount > 20 && crawlerCount < 40) {
+        if (crawlerCount.get() != 0 && queueSize / crawlerCount.get() > 20 && crawlerCount.get() < 40) {
             return true;
         } else {
             return false;
