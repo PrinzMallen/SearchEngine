@@ -22,7 +22,7 @@ import javax.net.ssl.X509TrustManager;
 public class CrawlerEngine {
 
     static String docsDir = System.getProperty("user.home") + "\\SearchEngine\\files\\";
-    private static Coordinator coordinator = new Coordinator(docsDir);
+    private static Coordinator coordinator = new DefaultCoordinator(docsDir, 3);
     private static boolean showMenu = true;
 
     public static void main(String[] argu) throws Exception {
